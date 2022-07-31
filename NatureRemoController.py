@@ -63,6 +63,32 @@ class NatureRemoController:
                 + str(self.movement)
             )
 
+    def sendSignal(self, nickname, signalName):
+        """
+        指定した信号名の信号を送信する
+
+        Args:
+            nickname (string): 家電名
+            signalName (string): 信号名
+        """
+        t = threading.Thread(target=self.__sendSignal, args=(nickname,signalName))
+        t.start()
+
+    def __sendSignal(self, nickname, signalName):
+        """
+        指定した信号名の信号を送信する
+
+        Args:
+            nickname (string): 家電名
+            signalName (string): 信号名
+        """
+        for appliance in self.appliances:
+            if appliance.nickname == nickname:
+                for signal in appliance.signals:
+                    if signal.name == signalName:
+                        self.api.send_signal(signal.id)
+                        print("### send " + signalName + " signal to " + appliance.nickname + " ###")
+
     def sendOnSignal(self, nickname):
         """
         オン信号を送信する
@@ -70,22 +96,8 @@ class NatureRemoController:
         Args:
             nickname (string): 家電名
         """
-        t = threading.Thread(target=self.__sendOnSignal, args=(nickname,))
+        t = threading.Thread(target=self.__sendSignal, args=(nickname,"オン"))
         t.start()
-
-    def __sendOnSignal(self, nickname):
-        """
-        オン信号を送信する
-
-        Args:
-            nickname (string): 家電名
-        """
-        for appliance in self.appliances:
-            if appliance.nickname == nickname:
-                for signal in appliance.signals:
-                    if signal.name == "オン":
-                        self.api.send_signal(appliance.signals[0].id)
-                        print("### send on signal to " + appliance.nickname + " ###")
 
     def sendOnSignals(self, nickname, repetNum=3):
         """
@@ -104,12 +116,12 @@ class NatureRemoController:
         Args:
             nickname (string): 家電名
         """
-        self.__sendOnSignal(nickname)
+        self.__sendSignal(nickname, "オン")
         repetNum -= 1
         if repetNum > 0:
             for num in range(repetNum):
                 time.sleep(1)
-                self.__sendOnSignal(nickname)
+                self.__sendSignal(nickname, "オン")
 
     def sendOnSignalLight(self, nickname):
         """
