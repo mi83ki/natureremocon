@@ -1,6 +1,7 @@
 import time
 import threading
 import os
+import datetime
 from dotenv import load_dotenv
 
 # APIモジュールのインポート
@@ -167,6 +168,22 @@ class NatureRemoController:
                 self.api.send_light_infrared_signal(appliance.id, "off")
                 print("### send off signal to " + appliance.nickname + " ###")
 
+    def getRemainCnt(self) -> int:
+        """
+        残り送信可能な回数を取得する
+        Returns:
+            int: 残り送信可能な回数
+        """
+        return self.api.rate_limit.remaining
+
+    def getResetTime(self) -> int:
+        """
+        制限が解除されるまでの時間
+        Returns:
+            int: 制限が解除されるまでの時間[s]
+        """
+        delta = self.api.rate_limit.reset - (datetime.datetime.now() - datetime.timedelta(hours=9))
+        return int(delta.total_seconds())
 
 # サンプルコード
 if __name__ == "__main__":
@@ -179,7 +196,13 @@ if __name__ == "__main__":
     while 1:
         remo.sendOnSignalLight(ROOM_LIGHT_NAME)
         remo.readDevice()
-        time.sleep(15)
+        print(remo.api.rate_limit)
+        print(remo.getRemainCnt())
+        print(remo.getResetTime())
+        time.sleep(10)
         remo.sendOffSignalLight(ROOM_LIGHT_NAME)
         remo.readDevice()
-        time.sleep(15)
+        print(remo.api.rate_limit)
+        print(remo.getRemainCnt())
+        print(remo.getResetTime())
+        time.sleep(10)
