@@ -4,7 +4,6 @@ import threading
 import time
 
 from dotenv import load_dotenv
-
 # APIモジュールのインポート
 from remo import NatureRemoAPI
 
@@ -26,26 +25,38 @@ class NatureRemoController:
         self.illumination = 0
         # 人感センサ
         self.movement = 0
-        # キューイング数
-        self.queueNum = 0
+        # 送信回数
+        self.sendCnt = 0
 
         # token指定
         self.api = NatureRemoAPI(myToken)
         # デバイス問い合わせ
-        self.devices = self.api.get_devices()
+        self.devices = self.getDevices()
         print(self.devices)
         # 家電問い合わせ
         while not self.canRequest():
             time.sleep(1)
-        self.appliances = self.api.get_appliances()
+        self.appliances = self.getAppliances()
         print(self.appliances)
+
+    def getUser(self):
+        self.sendCnt = 0
+        return self.api.get_user()
+
+    def getDevices(self):
+        self.sendCnt = 0
+        return self.api.get_devices()
+
+    def getAppliances(self):
+        self.sendCnt = 0
+        return self.api.get_appliances()
 
     def readDevice(self) -> bool:
         """
         デバイス情報を取得する
         """
         if self.canRequest():
-            self.queueNum += 1
+            self.sendCnt += 1
             t = threading.Thread(target=self.__readDevice)
             t.start()
             return True
@@ -57,7 +68,6 @@ class NatureRemoController:
         デバイス情報を取得する
         """
         self.devices = self.api.get_devices()
-        self.queueNum -= 1
         for device in self.devices:
             self.temperature = device.newest_events["te"].val
             self.humidity = device.newest_events["hu"].val
@@ -84,7 +94,7 @@ class NatureRemoController:
             signalName (string): 信号名
         """
         if self.canRequest():
-            self.queueNum += 1
+            self.sendCnt += 1
             t = threading.Thread(target=self.__sendSignal, args=(nickname, signalName))
             t.start()
             return True
@@ -104,7 +114,6 @@ class NatureRemoController:
                 for signal in appliance.signals:
                     if signal.name == signalName:
                         self.api.send_signal(signal.id)
-                        self.queueNum -= 1
                         print("### send " + signalName + " signal to " + appliance.nickname + " ###")
 
     def sendOnSignal(self, nickname) -> bool:
@@ -124,7 +133,7 @@ class NatureRemoController:
             nickname (string): 家電名
         """
         if self.canRequest(repetNum):
-            self.queueNum += repetNum
+            self.sendCnt += repetNum
             t = threading.Thread(target=self.__sendOnSignals, args=(nickname, repetNum))
             t.start()
             return True
@@ -153,7 +162,7 @@ class NatureRemoController:
             nickname (string): 家電名
         """
         if self.canRequest():
-            self.queueNum += 1
+            self.sendCnt += 1
             t = threading.Thread(target=self.__sendOnSignalLight, args=(nickname,))
             t.start()
             return True
@@ -170,7 +179,6 @@ class NatureRemoController:
         for appliance in self.appliances:
             if appliance.nickname == nickname:
                 self.api.send_light_infrared_signal(appliance.id, "on")
-                self.queueNum -= 1
                 print("### send on signal to " + appliance.nickname + " ###")
 
     def sendOffSignalLight(self, nickname) -> bool:
@@ -181,7 +189,7 @@ class NatureRemoController:
             nickname (string): 家電名
         """
         if self.canRequest():
-            self.queueNum += 1
+            self.sendCnt += 1
             t = threading.Thread(target=self.__sendOffSignalLight, args=(nickname,))
             t.start()
             return True
@@ -198,7 +206,6 @@ class NatureRemoController:
         for appliance in self.appliances:
             if appliance.nickname == nickname:
                 self.api.send_light_infrared_signal(appliance.id, "off")
-                self.queueNum -= 1
                 print("### send off signal to " + appliance.nickname + " ###")
 
     def getRemainCnt(self) -> int:
@@ -207,7 +214,7 @@ class NatureRemoController:
         Returns:
             int: 残り送信可能な回数
         """
-        return self.api.rate_limit.remaining
+        return self.api.rate_limit.remaining - self.sendCnt
 
     def getResetTime(self) -> int:
         """
@@ -226,24 +233,26 @@ class NatureRemoController:
         Returns:
             bool: True:リクエスト可能
         """
-        if self.getRemainCnt() - self.queueNum > num + 1 or self.getResetTime() < 0:
+        if self.getResetTime() < 0:
+            print(self.getUser())
+        if self.getRemainCnt() > num:
             print(
                 "canRequest(): OK. remain cnt = "
                 + str(self.getRemainCnt())
-                + ", queueNum = "
-                + str(self.queueNum)
-                + "resetTime = "
+                + ", resetTime = "
                 + str(self.getResetTime())
+                + ", rate_limit = "
+                + str(self.api.rate_limit)
             )
             return True
         else:
             print(
                 "canRequest(): Too Many Requests. remain cnt = "
                 + str(self.getRemainCnt())
-                + ", queueNum = "
-                + str(self.queueNum)
-                + "resetTime = "
+                + ", resetTime = "
                 + str(self.getResetTime())
+                + ", rate_limit = "
+                + str(self.api.rate_limit)
             )
             return False
 
@@ -253,19 +262,11 @@ if __name__ == "__main__":
     # 環境変数を読み込む
     load_dotenv()
     NATURE_REMO_TOKEN = os.environ.get("NATURE_REMO_TOKEN", "Your Nature Remo Token")
-    ROOM_LIGHT_NAME = os.environ.get("ROOM_LIGHT_NAME", "Your Light Name")
+    DEVICE_NAME = os.environ.get("DEVICE_NAME", "Your Nature Remo Token")
     # NatureRemoに接続
     remo = NatureRemoController(NATURE_REMO_TOKEN)
     while 1:
-        print(remo.sendOnSignalLight(ROOM_LIGHT_NAME))
-        print(remo.readDevice())
-        print(remo.api.rate_limit)
-        print(remo.getRemainCnt())
-        print(remo.getResetTime())
+        print(remo.sendSignal(DEVICE_NAME, "ch_up"))
         time.sleep(3)
-        print(remo.sendOffSignalLight(ROOM_LIGHT_NAME))
-        print(remo.readDevice())
-        print(remo.api.rate_limit)
-        print(remo.getRemainCnt())
-        print(remo.getResetTime())
+        print(remo.sendSignal(DEVICE_NAME, "ch_down"))
         time.sleep(3)
