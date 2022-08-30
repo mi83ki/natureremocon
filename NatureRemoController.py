@@ -1,7 +1,8 @@
-import time
-import threading
-import os
 import datetime
+import os
+import threading
+import time
+
 from dotenv import load_dotenv
 
 # APIモジュールのインポート
@@ -34,7 +35,7 @@ class NatureRemoController:
         self.devices = self.api.get_devices()
         print(self.devices)
         # 家電問い合わせ
-        while(not self.canRequest()):
+        while not self.canRequest():
             time.sleep(1)
         self.appliances = self.api.get_appliances()
         print(self.appliances)
@@ -226,11 +227,26 @@ class NatureRemoController:
             bool: True:リクエスト可能
         """
         if self.getRemainCnt() - self.queueNum > num + 1 or self.getResetTime() < 0:
-            print("canRequest(): OK. remain cnt = " + str(self.getRemainCnt()) + ", queueNum = " + str(self.queueNum))
+            print(
+                "canRequest(): OK. remain cnt = "
+                + str(self.getRemainCnt())
+                + ", queueNum = "
+                + str(self.queueNum)
+                + "resetTime = "
+                + str(self.getResetTime())
+            )
             return True
         else:
-            print("canRequest(): Too Many Requests. remain cnt = " + str(self.getRemainCnt()) + ", queueNum = " + str(self.queueNum))
+            print(
+                "canRequest(): Too Many Requests. remain cnt = "
+                + str(self.getRemainCnt())
+                + ", queueNum = "
+                + str(self.queueNum)
+                + "resetTime = "
+                + str(self.getResetTime())
+            )
             return False
+
 
 # サンプルコード
 if __name__ == "__main__":
