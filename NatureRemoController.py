@@ -27,6 +27,8 @@ class NatureRemoController:
         self.movement = 0
         # 送信回数
         self.sendCnt = 0
+        # 送受信情報
+        self.__requestName = ""
 
         # token指定
         self.api = NatureRemoAPI(myToken)
@@ -38,6 +40,9 @@ class NatureRemoController:
             time.sleep(1)
         self.appliances = self.getAppliances()
         print(self.appliances)
+
+    def getRequestName(self) -> str:
+        return self.__requestName
 
     def getUser(self):
         self.sendCnt = 0
@@ -51,23 +56,24 @@ class NatureRemoController:
         self.sendCnt = 0
         return self.api.get_appliances()
 
-    def readDevice(self) -> bool:
+    def readDevice(self, callback=None) -> bool:
         """
         デバイス情報を取得する
         """
         if self.canRequest():
             self.sendCnt += 1
-            t = threading.Thread(target=self.__readDevice)
+            t = threading.Thread(target=self.__readDevice, args=(callback,))
             t.start()
             return True
         else:
             return False
 
-    def __readDevice(self):
+    def __readDevice(self, callback=None):
         """
         デバイス情報を取得する
         """
-        self.devices = self.api.get_devices()
+        self.__requestName = "get_devices"
+        self.devices = self.getDevices()
         for device in self.devices:
             self.temperature = device.newest_events["te"].val
             self.humidity = device.newest_events["hu"].val
@@ -84,8 +90,12 @@ class NatureRemoController:
                 + ", "
                 + str(self.movement)
             )
+        if callback is not None:
+            callback()
+        if self.__requestName == "get_devices":
+            self.__requestName = ""
 
-    def sendSignal(self, nickname, signalName) -> bool:
+    def sendSignal(self, nickname, signalName, callback=None) -> bool:
         """
         指定した信号名の信号を送信する
 
@@ -95,13 +105,13 @@ class NatureRemoController:
         """
         if self.canRequest():
             self.sendCnt += 1
-            t = threading.Thread(target=self.__sendSignal, args=(nickname, signalName))
+            t = threading.Thread(target=self.__sendSignal, args=(nickname, signalName, callback))
             t.start()
             return True
         else:
             return False
 
-    def __sendSignal(self, nickname, signalName):
+    def __sendSignal(self, nickname, signalName, callback=None):
         """
         指定した信号名の信号を送信する
 
@@ -109,23 +119,28 @@ class NatureRemoController:
             nickname (string): 家電名
             signalName (string): 信号名
         """
+        self.__requestName = nickname + ":" + signalName
         for appliance in self.appliances:
             if appliance.nickname == nickname:
                 for signal in appliance.signals:
                     if signal.name == signalName:
                         self.api.send_signal(signal.id)
                         print("### send " + signalName + " signal to " + appliance.nickname + " ###")
+        if callback is not None:
+            callback()
+        if self.__requestName == nickname + ":" + signalName:
+            self.__requestName = ""
 
-    def sendOnSignal(self, nickname) -> bool:
+    def sendOnSignal(self, nickname, callback=None) -> bool:
         """
         オン信号を送信する
 
         Args:
             nickname (string): 家電名
         """
-        return self.sendSignal(nickname, "オン")
+        return self.sendSignal(nickname, "オン", callback)
 
-    def sendOnSignals(self, nickname, repetNum=3):
+    def sendOnSignals(self, nickname, repetNum=3, callback=None):
         """
         指定した回数オン信号を送信する
 
@@ -134,13 +149,13 @@ class NatureRemoController:
         """
         if self.canRequest(repetNum):
             self.sendCnt += repetNum
-            t = threading.Thread(target=self.__sendOnSignals, args=(nickname, repetNum))
+            t = threading.Thread(target=self.__sendOnSignals, args=(nickname, repetNum, callback))
             t.start()
             return True
         else:
             return False
 
-    def __sendOnSignals(self, nickname, repetNum=1):
+    def __sendOnSignals(self, nickname, repetNum=1, callback=None):
         """
         指定した回数オン信号を送信する
 
@@ -153,8 +168,28 @@ class NatureRemoController:
             for num in range(repetNum):
                 time.sleep(1)
                 self.__sendSignal(nickname, "オン")
+        if callback is not None:
+            callback()
 
-    def sendOnSignalLight(self, nickname) -> bool:
+    def sendOnSignalLight(self, nickname, callback=None) -> bool:
+        """
+        照明をつける
+
+        Args:
+            nickname (string): 家電名
+        """
+        return self.sendSignalLight(nickname, "on", callback)
+
+    def sendOffSignalLight(self, nickname, callback=None) -> bool:
+        """
+        照明を消す
+
+        Args:
+            nickname (string): 家電名
+        """
+        return self.sendSignalLight(nickname, "off", callback)
+
+    def sendSignalLight(self, nickname, signalName, callback=None) -> bool:
         """
         照明をつける
 
@@ -163,50 +198,29 @@ class NatureRemoController:
         """
         if self.canRequest():
             self.sendCnt += 1
-            t = threading.Thread(target=self.__sendOnSignalLight, args=(nickname,))
+            t = threading.Thread(target=self.__sendSignalLight, args=(nickname, signalName, callback))
             t.start()
             return True
         else:
             return False
 
-    def __sendOnSignalLight(self, nickname):
+    def __sendSignalLight(self, nickname, signalName, callback=None):
         """
         照明をつける
 
         Args:
             nickname (string): 家電名
+            signalName (string): 信号名
         """
+        self.__requestName = nickname + ":" + signalName
         for appliance in self.appliances:
             if appliance.nickname == nickname:
-                self.api.send_light_infrared_signal(appliance.id, "on")
-                print("### send on signal to " + appliance.nickname + " ###")
-
-    def sendOffSignalLight(self, nickname) -> bool:
-        """
-        照明を消す
-
-        Args:
-            nickname (string): 家電名
-        """
-        if self.canRequest():
-            self.sendCnt += 1
-            t = threading.Thread(target=self.__sendOffSignalLight, args=(nickname,))
-            t.start()
-            return True
-        else:
-            return False
-
-    def __sendOffSignalLight(self, nickname):
-        """
-        照明を消す
-
-        Args:
-            nickname (string): 家電名
-        """
-        for appliance in self.appliances:
-            if appliance.nickname == nickname:
-                self.api.send_light_infrared_signal(appliance.id, "off")
-                print("### send off signal to " + appliance.nickname + " ###")
+                self.api.send_light_infrared_signal(appliance.id, signalName)
+                print("### send " + signalName + " signal to " + appliance.nickname + " ###")
+        if callback is not None:
+            callback()
+        if self.__requestName == nickname + ":" + signalName:
+            self.__requestName = ""
 
     def getRemainCnt(self) -> int:
         """
@@ -258,6 +272,10 @@ class NatureRemoController:
 
 
 # サンプルコード
+def sendCallback():
+    print("send finished! " + str(datetime.datetime.now()))
+
+
 if __name__ == "__main__":
     # 環境変数を読み込む
     load_dotenv()
@@ -266,7 +284,15 @@ if __name__ == "__main__":
     # NatureRemoに接続
     remo = NatureRemoController(NATURE_REMO_TOKEN)
     while 1:
-        print(remo.sendSignal(DEVICE_NAME, "ch_up"))
+        print(remo.getRequestName())
+        print("send start! " + str(datetime.datetime.now()))
+        print(remo.sendSignal(DEVICE_NAME, "ch_up", sendCallback))
+        print(remo.sendOnSignalLight("書斎", sendCallback))
+        print(remo.getRequestName())
         time.sleep(3)
-        print(remo.sendSignal(DEVICE_NAME, "ch_down"))
+        print(remo.getRequestName())
+        print("send start! " + str(datetime.datetime.now()))
+        print(remo.sendSignal(DEVICE_NAME, "ch_down", sendCallback))
+        print(remo.sendOffSignalLight("書斎", sendCallback))
+        print(remo.getRequestName())
         time.sleep(3)
