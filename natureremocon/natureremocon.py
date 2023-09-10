@@ -1,270 +1,318 @@
-import datetime
+"""natureremocon.py
+
+スマートリモコンNatureRemoをコントローラーするクラス
+
+"""
+
 import os
 import threading
 import time
+from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
+
 # APIモジュールのインポート
-from remo import NatureRemoAPI
+from remo import Appliance, Device, NatureRemoAPI, User
 
 
 class NatureRemoController:
-    """
-    NatureRemoコントローラ
-    """
+    """NatureRemoコントローラ"""
 
-    def __init__(self, myToken):
-        """
-        コンストラクタ
+    def __init__(self, my_token: str) -> None:
+        """コンストラクタ
+
+        Args:
+            my_token (str): NatureRemoトークン
         """
         # 温度
-        self.temperature = 0
+        self._temperature = 0
         # 湿度
-        self.humidity = 0
+        self._humidity = 0
         # 照度
-        self.illumination = 0
+        self._illumination = 0
         # 人感センサ
-        self.movement = 0
+        self._movement = 0
         # 送信回数
-        self.sendCnt = 0
+        self._send_cnt = 0
         # 送受信情報
-        self.__requestName = ""
+        self._request_name: str = ""
 
         # token指定
-        self.api = NatureRemoAPI(myToken)
+        self.api = NatureRemoAPI(my_token)
         # デバイス問い合わせ
-        self.devices = self.getDevices()
+        self.devices: list[Device] = self.get_devices()
         print(self.devices)
         # 家電問い合わせ
-        while not self.canRequest():
+        while not self.can_request():
             time.sleep(1)
-        self.appliances = self.getAppliances()
+        self.appliances: list[Appliance] = self.get_appliances()
         print(self.appliances)
 
-    def getRequestName(self) -> str:
-        return self.__requestName
+    @property
+    def request_name(self) -> str:
+        """送受信情報を取得する
 
-    def getUser(self):
-        self.sendCnt = 0
+        Returns:
+            str: _description_
+        """
+        return self._request_name
+
+    def get_user(self) -> User:
+        """ユーザー情報を取得する
+
+        Returns:
+            User: _description_
+        """
+        self._send_cnt = 0
         return self.api.get_user()
 
-    def getDevices(self):
-        self.sendCnt = 0
+    def get_devices(self) -> list[Device]:
+        """デバイス情報を取得する
+
+        Returns:
+            list[Device]: _description_
+        """
+        self._send_cnt = 0
         return self.api.get_devices()
 
-    def getAppliances(self):
-        self.sendCnt = 0
+    def get_appliances(self) -> list[Appliance]:
+        """家電情報を取得する
+
+        Returns:
+            list[Appliance]: _description_
+        """
+        self._send_cnt = 0
         return self.api.get_appliances()
 
-    def readDevice(self, callback=None) -> bool:
+    def read_devices(self, callback=None) -> bool:
+        """デバイス情報を取得する
+
+        Args:
+            callback (_type_, optional): _description_. Defaults to None.
+
+        Returns:
+            bool: _description_
         """
-        デバイス情報を取得する
-        """
-        if self.canRequest():
-            self.sendCnt += 1
-            t = threading.Thread(target=self.__readDevice, args=(callback,))
-            t.start()
+        if self.can_request():
+            self._send_cnt += 1
+            thread = threading.Thread(target=self.__read_device, args=(callback,))
+            thread.start()
             return True
         else:
             return False
 
-    def __readDevice(self, callback=None):
-        """
-        デバイス情報を取得する
-        """
-        self.__requestName = "get_devices"
-        self.devices = self.getDevices()
+    def __read_device(self, callback=None):
+        """デバイス情報を取得する"""
+        self._request_name = "get_devices"
+        self.devices = self.get_devices()
         for device in self.devices:
-            self.temperature = device.newest_events["te"].val
-            self.humidity = device.newest_events["hu"].val
-            self.illumination = device.newest_events["il"].val
-            self.movement = device.newest_events["mo"].val
+            self._temperature = device.newest_events["te"].val
+            self._humidity = device.newest_events["hu"].val
+            self._illumination = device.newest_events["il"].val
+            self._movement = device.newest_events["mo"].val
             print(
                 str(device.name)
                 + ": "
-                + str(self.temperature)
+                + str(self._temperature)
                 + ", "
-                + str(self.humidity)
+                + str(self._humidity)
                 + ", "
-                + str(self.illumination)
+                + str(self._illumination)
                 + ", "
-                + str(self.movement)
+                + str(self._movement)
             )
         if callback is not None:
             callback()
-        if self.__requestName == "get_devices":
-            self.__requestName = ""
+        if self._request_name == "get_devices":
+            self._request_name = ""
 
-    def sendSignal(self, nickname, signalName, callback=None) -> bool:
-        """
-        指定した信号名の信号を送信する
+    def send_signal(self, nickname, signal_name, callback=None) -> bool:
+        """指定した信号名の信号を送信する
 
         Args:
             nickname (string): 家電名
-            signalName (string): 信号名
+            signal_name (string): 信号名
         """
-        if self.canRequest():
-            self.sendCnt += 1
-            t = threading.Thread(target=self.__sendSignal, args=(nickname, signalName, callback))
-            t.start()
+        if self.can_request():
+            self._send_cnt += 1
+            thread = threading.Thread(
+                target=self.__send_signal, args=(nickname, signal_name, callback)
+            )
+            thread.start()
             return True
         else:
             return False
 
-    def __sendSignal(self, nickname, signalName, callback=None):
-        """
-        指定した信号名の信号を送信する
+    def __send_signal(self, nickname, signal_name, callback=None):
+        """指定した信号名の信号を送信する
 
         Args:
             nickname (string): 家電名
-            signalName (string): 信号名
+            signal_name (string): 信号名
         """
-        self.__requestName = nickname + ":" + signalName
+        self._request_name = nickname + ":" + signal_name
         for appliance in self.appliances:
             if appliance.nickname == nickname:
                 for signal in appliance.signals:
-                    if signal.name == signalName:
+                    if signal.name == signal_name:
                         self.api.send_signal(signal.id)
-                        print("### send " + signalName + " signal to " + appliance.nickname + " ###")
+                        print(
+                            "### send "
+                            + signal_name
+                            + " signal to "
+                            + appliance.nickname
+                            + " ###"
+                        )
         if callback is not None:
             callback()
-        if self.__requestName == nickname + ":" + signalName:
-            self.__requestName = ""
+        if self._request_name == nickname + ":" + signal_name:
+            self._request_name = ""
 
-    def sendOnSignal(self, nickname, callback=None) -> bool:
-        """
-        オン信号を送信する
-
-        Args:
-            nickname (string): 家電名
-        """
-        return self.sendSignal(nickname, "オン", callback)
-
-    def sendOnSignals(self, nickname, repetNum=3, callback=None):
-        """
-        指定した回数オン信号を送信する
+    def send_on_signal(self, nickname, callback=None) -> bool:
+        """オン信号を送信する
 
         Args:
             nickname (string): 家電名
         """
-        if self.canRequest(repetNum):
-            self.sendCnt += repetNum
-            t = threading.Thread(target=self.__sendOnSignals, args=(nickname, repetNum, callback))
-            t.start()
+        return self.send_signal(nickname, "オン", callback)
+
+    def send_on_signals(self, nickname, repeat_num=3, callback=None) -> bool:
+        """指定した回数オン信号を送信する
+
+        Args:
+            nickname (string): 家電名
+        """
+        if self.can_request(repeat_num):
+            self._send_cnt += repeat_num
+            thread = threading.Thread(
+                target=self.__send_on_signals, args=(nickname, repetNum, callback)
+            )
+            thread.start()
             return True
         else:
             return False
 
-    def __sendOnSignals(self, nickname, repetNum=1, callback=None):
-        """
-        指定した回数オン信号を送信する
+    def __send_on_signals(self, nickname, repeat_num=1, callback=None) -> None:
+        """指定した回数オン信号を送信する
 
         Args:
             nickname (string): 家電名
         """
-        self.__sendSignal(nickname, "オン")
-        repetNum -= 1
-        if repetNum > 0:
-            for num in range(repetNum):
+        self.__send_signal(nickname, "オン")
+        repeat_num -= 1
+        if repeat_num > 0:
+            for _ in range(repeat_num):
                 time.sleep(1)
-                self.__sendSignal(nickname, "オン")
+                self.__send_signal(nickname, "オン")
         if callback is not None:
             callback()
 
-    def sendOnSignalLight(self, nickname, callback=None) -> bool:
-        """
-        照明をつける
+    def send_on_signal_light(self, nickname, callback=None) -> bool:
+        """照明をつける
 
         Args:
             nickname (string): 家電名
         """
-        return self.sendSignalLight(nickname, "on", callback)
+        return self.send_signal_light(nickname, "on", callback)
 
-    def sendOffSignalLight(self, nickname, callback=None) -> bool:
-        """
-        照明を消す
-
-        Args:
-            nickname (string): 家電名
-        """
-        return self.sendSignalLight(nickname, "off", callback)
-
-    def sendSignalLight(self, nickname, signalName, callback=None) -> bool:
-        """
-        照明をつける
+    def send_off_signal_light(self, nickname, callback=None) -> bool:
+        """照明を消す
 
         Args:
             nickname (string): 家電名
         """
-        if self.canRequest():
-            self.sendCnt += 1
-            t = threading.Thread(target=self.__sendSignalLight, args=(nickname, signalName, callback))
-            t.start()
+        return self.send_signal_light(nickname, "off", callback)
+
+    def send_signal_light(self, nickname, signal_name, callback=None) -> bool:
+        """照明をつける
+
+        Args:
+            nickname (string): 家電名
+        """
+        if self.can_request():
+            self._send_cnt += 1
+            thread = threading.Thread(
+                target=self.__send_signal_light, args=(nickname, signal_name, callback)
+            )
+            thread.start()
             return True
         else:
             return False
 
-    def __sendSignalLight(self, nickname, signalName, callback=None):
-        """
-        照明をつける
+    def __send_signal_light(self, nickname, signal_name, callback=None):
+        """照明をつける
 
         Args:
             nickname (string): 家電名
-            signalName (string): 信号名
+            signal_name (string): 信号名
         """
-        self.__requestName = nickname + ":" + signalName
+        self._request_name = nickname + ":" + signal_name
         for appliance in self.appliances:
             if appliance.nickname == nickname:
-                self.api.send_light_infrared_signal(appliance.id, signalName)
-                print("### send " + signalName + " signal to " + appliance.nickname + " ###")
+                self.api.send_light_infrared_signal(appliance.id, signal_name)
+                print(
+                    "### send "
+                    + signal_name
+                    + " signal to "
+                    + appliance.nickname
+                    + " ###"
+                )
         if callback is not None:
             callback()
-        if self.__requestName == nickname + ":" + signalName:
-            self.__requestName = ""
+        if self._request_name == nickname + ":" + signal_name:
+            self._request_name = ""
 
-    def getRemainCnt(self) -> int:
-        """
-        残り送信可能な回数を取得する
+    def get_remain_cnt(self) -> int | None:
+        """残り送信可能な回数を取得する
+
         Returns:
-            int: 残り送信可能な回数
+            int | None: 残り送信可能な回数
         """
-        return self.api.rate_limit.remaining - self.sendCnt
+        remaining = self.api.rate_limit.remaining
+        if remaining is not None:
+            return remaining - self._send_cnt
+        return None
 
-    def getResetTime(self) -> int:
-        """
-        制限が解除されるまでの時間
+    def get_reset_time(self) -> int | None:
+        """制限が解除されるまでの時間
+
         Returns:
-            int: 制限が解除されるまでの時間[s]
+            int | None: 制限が解除されるまでの時間[s]
         """
-        delta = self.api.rate_limit.reset - (datetime.datetime.now() - datetime.timedelta(hours=9))
-        return int(delta.total_seconds())
+        reset: datetime | None = self.api.rate_limit.reset
+        if reset is not None:
+            delta: timedelta = reset - (datetime.now() - timedelta(hours=9))
+            return int(delta.total_seconds())
+        return None
 
-    def canRequest(self, num=1) -> bool:
-        """
-        NatureRemoにリクエストできるかどうか
+    def can_request(self, num=1) -> bool:
+        """NatureRemoにリクエストできるかどうか
+
         Args:
             num (int, optional): リクエストするコマンドの数. Defaults to 1.
         Returns:
             bool: True:リクエスト可能
         """
-        if self.getResetTime() < 0:
-            print(self.getUser())
-        if self.getRemainCnt() > num:
+        reset_time: int | None = self.get_reset_time()
+        remain_cnt: int | None = self.get_remain_cnt()
+        if reset_time is not None and reset_time < 0:
+            print(self.get_user())
+        if remain_cnt is not None and remain_cnt > num:
             print(
-                "canRequest(): OK. remain cnt = "
-                + str(self.getRemainCnt())
+                "can_request(): OK. remain cnt = "
+                + str(remain_cnt)
                 + ", resetTime = "
-                + str(self.getResetTime())
+                + str(reset_time)
                 + ", rate_limit = "
                 + str(self.api.rate_limit)
             )
             return True
         else:
             print(
-                "canRequest(): Too Many Requests. remain cnt = "
-                + str(self.getRemainCnt())
+                "can_request(): Too Many Requests. remain cnt = "
+                + str(remain_cnt)
                 + ", resetTime = "
-                + str(self.getResetTime())
+                + str(reset_time)
                 + ", rate_limit = "
                 + str(self.api.rate_limit)
             )
@@ -272,8 +320,9 @@ class NatureRemoController:
 
 
 # サンプルコード
-def sendCallback():
-    print("send finished! " + str(datetime.datetime.now()))
+def send_callback() -> None:
+    """送信コールバック"""
+    print("send finished! " + str(datetime.now()))
 
 
 if __name__ == "__main__":
@@ -284,15 +333,15 @@ if __name__ == "__main__":
     # NatureRemoに接続
     remo = NatureRemoController(NATURE_REMO_TOKEN)
     while 1:
-        print(remo.getRequestName())
-        print("send start! " + str(datetime.datetime.now()))
-        print(remo.sendSignal(DEVICE_NAME, "ch_up", sendCallback))
-        print(remo.sendOnSignalLight("書斎", sendCallback))
-        print(remo.getRequestName())
+        print(remo.request_name)
+        print("send start! " + str(datetime.now()))
+        print(remo.send_signal(DEVICE_NAME, "ch_up", send_callback))
+        print(remo.send_on_signal_light("書斎", send_callback))
+        print(remo.request_name)
         time.sleep(3)
-        print(remo.getRequestName())
-        print("send start! " + str(datetime.datetime.now()))
-        print(remo.sendSignal(DEVICE_NAME, "ch_down", sendCallback))
-        print(remo.sendOffSignalLight("書斎", sendCallback))
-        print(remo.getRequestName())
+        print(remo.request_name)
+        print("send start! " + str(datetime.now()))
+        print(remo.send_signal(DEVICE_NAME, "ch_down", send_callback))
+        print(remo.send_off_signal_light("書斎", send_callback))
+        print(remo.request_name)
         time.sleep(3)
