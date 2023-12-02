@@ -185,7 +185,7 @@ class NatureRemoController:
         if self.can_request(repeat_num):
             self._send_cnt += repeat_num
             thread = threading.Thread(
-                target=self.__send_on_signals, args=(nickname, repetNum, callback)
+                target=self.__send_on_signals, args=(nickname, repeat_num, callback)
             )
             thread.start()
             return True
